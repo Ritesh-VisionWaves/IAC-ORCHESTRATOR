@@ -19,3 +19,12 @@ resource "google_compute_network" "plan_test" {
 output "project_number" {
   value = data.google_project.this.number
 }
+
+# v2 (rollback test): one small subnet in the test network only. Free; removed again by rolling back to run #1.
+resource "google_compute_subnetwork" "plan_test" {
+  name                     = "devsecops-plan-test-subnet"
+  ip_cidr_range            = "10.250.0.0/28"
+  region                   = var.region
+  network                  = google_compute_network.plan_test.id
+  private_ip_google_access = true
+}
