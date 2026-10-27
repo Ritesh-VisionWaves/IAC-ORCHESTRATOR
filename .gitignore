@@ -1,0 +1,14 @@
+# Terraform working files and state never belong in Git: state can hold secrets.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+# Variable files can hold secrets; commit an example instead.
+*.tfvars
+!*.tfvars.example
+# Override files change behaviour silently.
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
