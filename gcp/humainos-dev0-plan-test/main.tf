@@ -64,7 +64,7 @@ resource "google_compute_disk" "s8_data" {
 # Not attached to anything: the disk that the replace test changes.
 resource "google_compute_disk" "s8_scratch" {
   name   = "devsecops-s8-scratch"
-  type   = "pd-standard"
+  type   = "pd-balanced" # was pd-standard: changing the type replaces the disk (the replace test)
   zone   = local.zone
   size   = 10
   labels = local.labels
