@@ -36,14 +36,15 @@ resource "google_compute_subnetwork" "s8" {
   private_ip_google_access = true
 }
 
-# Deliberately open to the internet on port 22, so the misconfiguration scan has something to report.
-resource "google_compute_firewall" "s8_ssh_open" {
-  name    = "devsecops-s8-ssh-open"
+# Deliberately open to the internet on port 443, so the checks have something to warn about. (Port 22 open to the
+# internet is blocked outright by the platform's own check: the first plan of this test showed it.)
+resource "google_compute_firewall" "s8_web_open" {
+  name    = "devsecops-s8-web-open"
   network = google_compute_network.s8.id
 
   allow {
     protocol = "tcp"
-    ports    = ["22"]
+    ports    = ["443"]
   }
 
   source_ranges = ["0.0.0.0/0"]
