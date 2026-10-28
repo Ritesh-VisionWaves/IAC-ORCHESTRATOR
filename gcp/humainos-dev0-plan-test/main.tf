@@ -1,4 +1,5 @@
-# Internal network for integration tests.
+# Step 8 acceptance test of the DevSecOps platform on humainos-dev0: every devsecops-s8 test resource removed.
+# Applying this deletes only what this state holds - the test resources - after the deletion checks and safety nets.
 
 provider "google" {
   project = var.project_id
@@ -6,23 +7,6 @@ provider "google" {
 }
 
 data "google_project" "this" {}
-
-resource "google_compute_network" "s8h" {
-  name                    = "devsecops-s8h-net"
-  auto_create_subnetworks = false
-}
-
-resource "google_compute_firewall" "s8_mysql_open" {
-  name    = "devsecops-s8h-mysql-open"
-  network = google_compute_network.s8h.id
-
-  allow {
-    protocol = "tcp"
-    ports    = ["3306"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-}
 
 output "project_number" {
   value = data.google_project.this.number
