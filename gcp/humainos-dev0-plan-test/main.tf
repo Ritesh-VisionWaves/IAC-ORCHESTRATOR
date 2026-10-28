@@ -18,11 +18,6 @@ locals {
   }
 }
 
-resource "google_service_account" "s8" {
-  account_id   = "devsecops-s8-sa"
-  display_name = "DevSecOps step 8 test (safe to delete)"
-}
-
 resource "google_compute_network" "s8" {
   name                    = "devsecops-s8-net"
   auto_create_subnetworks = false
@@ -68,8 +63,6 @@ resource "google_compute_instance" "s8_vm" {
     block-project-ssh-keys = "true"
   }
 
-  # Only so the account exists before the VM is created.
-  depends_on = [google_service_account.s8]
 }
 
 output "project_number" {
