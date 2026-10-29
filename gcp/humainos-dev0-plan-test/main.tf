@@ -152,7 +152,7 @@ resource "google_kms_crypto_key" "s9" {
   rotation_period = "7776000s"
 }
 
-# Cloud Functions (2nd gen): a tiny HTTP function from a zip kept in this repository (files/), in a bucket of its own.
+# Cloud Functions (2nd gen): the bucket its source zip goes to.
 resource "google_storage_bucket" "s9_fn_source" {
   name                        = "${var.project_id}-devsecops-s9-fn"
   location                    = "US"
@@ -160,34 +160,8 @@ resource "google_storage_bucket" "s9_fn_source" {
   force_destroy               = true
 }
 
-resource "google_storage_bucket_object" "s9_fn_source" {
-  name   = "fn-${filemd5("${path.module}/files/devsecops-s9-fn.zip")}.zip"
-  bucket = google_storage_bucket.s9_fn_source.name
-  source = "${path.module}/files/devsecops-s9-fn.zip"
-}
-
-resource "google_cloudfunctions2_function" "s9" {
-  name     = "devsecops-s9-fn"
-  location = var.region
-
-  build_config {
-    runtime     = "nodejs20"
-    entry_point = "hello"
-
-    source {
-      storage_source {
-        bucket = google_storage_bucket.s9_fn_source.name
-        object = google_storage_bucket_object.s9_fn_source.name
-      }
-    }
-  }
-
-  service_config {
-    max_instance_count = 1
-    available_memory   = "256M"
-    timeout_seconds    = 60
-  }
-}
+# The function itself (google_storage_bucket_object + google_cloudfunctions2_function) comes back once the platform
+# reads binary files from the repository: today it skips files/devsecops-s9-fn.zip as "not a text file".
 
 # Cloud SQL: the smallest MySQL with backups on, reachable only from the dev cluster and the tester's machine. Its
 # tables are made by hand during the test and it is registered in Database DevOps, so a delete shows its tables.
