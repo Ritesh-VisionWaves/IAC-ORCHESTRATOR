@@ -1,5 +1,6 @@
 # Live check of the DevSecOps platform on humainos-dev0 (devsecops-s9): one of each type not tested yet - a small GKE
-# cluster, a Cloud Run service behind an HTTP load balancer, Redis and a BigQuery table - on a network of their own.
+# cluster, a Cloud Run service behind an HTTP load balancer, Redis, a BigQuery table, a KMS key, a Cloud Function and a
+# Cloud SQL database - on a network of their own.
 # Every resource here is created for the test and deleted after it; nothing refers to the project's own resources.
 
 provider "google" {
@@ -66,6 +67,11 @@ resource "google_cloud_run_v2_service" "s9" {
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello"
     }
+  }
+
+  # Google reports an empty scaling block back that the code does not set (provider 6.x): not a change of ours.
+  lifecycle {
+    ignore_changes = [scaling]
   }
 }
 
@@ -134,10 +140,118 @@ resource "google_bigquery_table" "s9_events" {
   ])
 }
 
+# KMS: a key ring and a key. Google never deletes either (only key versions), so these two stay in the project.
+resource "google_kms_key_ring" "s9" {
+  name     = "devsecops-s9-ring"
+  location = var.region
+}
+
+resource "google_kms_crypto_key" "s9" {
+  name            = "devsecops-s9-key"
+  key_ring        = google_kms_key_ring.s9.id
+  rotation_period = "7776000s"
+}
+
+# Cloud Functions (2nd gen): a tiny HTTP function built from a zip in a bucket of its own.
+data "archive_file" "s9_fn" {
+  type        = "zip"
+  output_path = "${path.module}/.build/devsecops-s9-fn.zip"
+
+  source {
+    filename = "index.js"
+    content  = "exports.hello = (req, res) => { res.send('devsecops s9'); };\n"
+  }
+
+  source {
+    filename = "package.json"
+    content  = jsonencode({ name = "devsecops-s9-fn", version = "1.0.0", main = "index.js" })
+  }
+}
+
+resource "google_storage_bucket" "s9_fn_source" {
+  name                        = "${var.project_id}-devsecops-s9-fn"
+  location                    = "US"
+  uniform_bucket_level_access = true
+  force_destroy               = true
+}
+
+resource "google_storage_bucket_object" "s9_fn_source" {
+  name   = "fn-${data.archive_file.s9_fn.output_md5}.zip"
+  bucket = google_storage_bucket.s9_fn_source.name
+  source = data.archive_file.s9_fn.output_path
+}
+
+resource "google_cloudfunctions2_function" "s9" {
+  name     = "devsecops-s9-fn"
+  location = var.region
+
+  build_config {
+    runtime     = "nodejs20"
+    entry_point = "hello"
+
+    source {
+      storage_source {
+        bucket = google_storage_bucket.s9_fn_source.name
+        object = google_storage_bucket_object.s9_fn_source.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 1
+    available_memory   = "256M"
+    timeout_seconds    = 60
+  }
+}
+
+# Cloud SQL: the smallest MySQL with backups on, reachable only from the dev cluster and the tester's machine. Its
+# tables are made by hand during the test and it is registered in Database DevOps, so a delete shows its tables.
+resource "google_sql_database_instance" "s9" {
+  name                = "devsecops-s9-sql"
+  database_version    = "MYSQL_8_0"
+  region              = var.region
+  deletion_protection = false
+
+  settings {
+    tier      = "db-f1-micro"
+    edition   = "ENTERPRISE"
+    disk_size = 10
+
+    backup_configuration {
+      enabled            = true
+      binary_log_enabled = true
+    }
+
+    ip_configuration {
+      ipv4_enabled = true
+      ssl_mode     = "ALLOW_UNENCRYPTED_AND_ENCRYPTED"
+
+      authorized_networks {
+        name  = "devsecops-dev-cluster"
+        value = "47.247.172.146/32"
+      }
+
+      authorized_networks {
+        name  = "devsecops-tester"
+        value = "14.195.204.158/32"
+      }
+    }
+  }
+}
+
+resource "google_sql_database" "s9_shop" {
+  name     = "s9_shop"
+  instance = google_sql_database_instance.s9.name
+}
+
 output "project_number" {
   value = data.google_project.this.number
 }
 
 output "load_balancer_ip" {
   value = google_compute_global_forwarding_rule.s9.ip_address
+}
+
+output "sql_public_ip" {
+  value = google_sql_database_instance.s9.public_ip_address
 }
