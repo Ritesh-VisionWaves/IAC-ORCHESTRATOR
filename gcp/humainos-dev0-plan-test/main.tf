@@ -152,22 +152,7 @@ resource "google_kms_crypto_key" "s9" {
   rotation_period = "7776000s"
 }
 
-# Cloud Functions (2nd gen): a tiny HTTP function built from a zip in a bucket of its own.
-data "archive_file" "s9_fn" {
-  type        = "zip"
-  output_path = "${path.module}/.build/devsecops-s9-fn.zip"
-
-  source {
-    filename = "index.js"
-    content  = "exports.hello = (req, res) => { res.send('devsecops s9'); };\n"
-  }
-
-  source {
-    filename = "package.json"
-    content  = jsonencode({ name = "devsecops-s9-fn", version = "1.0.0", main = "index.js" })
-  }
-}
-
+# Cloud Functions (2nd gen): a tiny HTTP function from a zip kept in this repository (files/), in a bucket of its own.
 resource "google_storage_bucket" "s9_fn_source" {
   name                        = "${var.project_id}-devsecops-s9-fn"
   location                    = "US"
@@ -176,9 +161,9 @@ resource "google_storage_bucket" "s9_fn_source" {
 }
 
 resource "google_storage_bucket_object" "s9_fn_source" {
-  name   = "fn-${data.archive_file.s9_fn.output_md5}.zip"
+  name   = "fn-${filemd5("${path.module}/files/devsecops-s9-fn.zip")}.zip"
   bucket = google_storage_bucket.s9_fn_source.name
-  source = data.archive_file.s9_fn.output_path
+  source = "${path.module}/files/devsecops-s9-fn.zip"
 }
 
 resource "google_cloudfunctions2_function" "s9" {
