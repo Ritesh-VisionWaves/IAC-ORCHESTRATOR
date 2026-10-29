@@ -1,5 +1,5 @@
-# Live check of the DevSecOps platform on humainos-dev0 (devsecops-s10): updates and replaces. Stage 2 changes them in
-# place (some restart or flush); stage 1 created small
+# Live check of the DevSecOps platform on humainos-dev0 (devsecops-s10): updates and replaces. Stage 3 forces replaces
+# (VM image, bucket location, table partitioning); stage 2 changed them in place; stage 1 created small
 # test resources; later stages change them in place, then force replaces, then delete everything. Test resources only.
 
 provider "google" {
@@ -11,7 +11,7 @@ data "google_project" "this" {}
 
 locals {
   zone   = "${var.region}-a"
-  labels = { purpose = "devsecops-s10-live-check", stage = "two" }
+  labels = { purpose = "devsecops-s10-live-check", stage = "three" }
 }
 
 resource "google_compute_network" "s10" {
@@ -63,7 +63,7 @@ resource "google_compute_instance" "s10_vm" {
 
   boot_disk {
     initialize_params {
-      image = "debian-cloud/debian-12"
+      image = "debian-cloud/debian-11"
       size  = 10
     }
   }
@@ -79,7 +79,7 @@ resource "google_compute_instance" "s10_vm" {
 
 resource "google_storage_bucket" "s10" {
   name                        = "${var.project_id}-devsecops-s10"
-  location                    = "US"
+  location                    = "US-CENTRAL1"
   uniform_bucket_level_access = true
   force_destroy               = true
   labels                      = local.labels
@@ -182,6 +182,11 @@ resource "google_bigquery_table" "s10_events" {
   dataset_id          = google_bigquery_dataset.s10.dataset_id
   table_id            = "events"
   deletion_protection = false
+
+  time_partitioning {
+    type  = "DAY"
+    field = "happened"
+  }
 
   schema = jsonencode([
     { name = "id", type = "INTEGER", mode = "REQUIRED" },
