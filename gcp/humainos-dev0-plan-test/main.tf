@@ -63,7 +63,7 @@ resource "google_compute_instance" "s10_vm" {
 
   boot_disk {
     initialize_params {
-      image = "debian-cloud/debian-11"
+      image = "ubuntu-os-cloud/ubuntu-2404-lts-amd64"
       size  = 10
     }
   }
