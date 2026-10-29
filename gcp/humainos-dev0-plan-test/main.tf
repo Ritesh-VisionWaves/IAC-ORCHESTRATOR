@@ -1,4 +1,5 @@
-# Live check of the DevSecOps platform on humainos-dev0 (devsecops-s10): updates and replaces. Stage 1 creates small
+# Live check of the DevSecOps platform on humainos-dev0 (devsecops-s10): updates and replaces. Stage 2 changes them in
+# place (some restart or flush); stage 1 created small
 # test resources; later stages change them in place, then force replaces, then delete everything. Test resources only.
 
 provider "google" {
@@ -10,7 +11,7 @@ data "google_project" "this" {}
 
 locals {
   zone   = "${var.region}-a"
-  labels = { purpose = "devsecops-s10-live-check", stage = "one" }
+  labels = { purpose = "devsecops-s10-live-check", stage = "two" }
 }
 
 resource "google_compute_network" "s10" {
@@ -41,14 +42,14 @@ resource "google_compute_firewall" "s10_internal" {
 
   allow {
     protocol = "tcp"
-    ports    = ["8080"]
+    ports    = ["8081"]
   }
 }
 
 resource "google_compute_disk" "s10_data" {
   name   = "devsecops-s10-data"
   zone   = local.zone
-  size   = 10
+  size   = 20
   type   = "pd-standard"
   labels = local.labels
 }
@@ -56,7 +57,7 @@ resource "google_compute_disk" "s10_data" {
 resource "google_compute_instance" "s10_vm" {
   name                      = "devsecops-s10-vm"
   zone                      = local.zone
-  machine_type              = "e2-micro"
+  machine_type              = "e2-small"
   allow_stopping_for_update = true
   labels                    = local.labels
 
@@ -82,6 +83,19 @@ resource "google_storage_bucket" "s10" {
   uniform_bucket_level_access = true
   force_destroy               = true
   labels                      = local.labels
+
+  versioning {
+    enabled = true
+  }
+
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 resource "google_cloud_run_v2_service" "s10" {
@@ -92,6 +106,11 @@ resource "google_cloud_run_v2_service" "s10" {
   template {
     containers {
       image = "us-docker.pkg.dev/cloudrun/container/hello"
+
+      env {
+        name  = "GREETING"
+        value = "stage two"
+      }
     }
   }
 
@@ -119,7 +138,7 @@ resource "google_container_node_pool" "s10" {
   name       = "devsecops-s10-pool"
   cluster    = google_container_cluster.s10.id
   location   = local.zone
-  node_count = 1
+  node_count = 2
 
   node_config {
     machine_type = "e2-medium"
@@ -131,7 +150,7 @@ resource "google_container_node_pool" "s10" {
 resource "google_redis_instance" "s10" {
   name               = "devsecops-s10-redis"
   tier               = "BASIC"
-  memory_size_gb     = 1
+  memory_size_gb     = 2
   region             = var.region
   authorized_network = google_compute_network.s10.id
 }
@@ -143,7 +162,7 @@ resource "google_sql_database_instance" "s10" {
   deletion_protection = false
 
   settings {
-    tier      = "db-f1-micro"
+    tier      = "db-g1-small"
     edition   = "ENTERPRISE"
     disk_size = 10
 
@@ -168,6 +187,7 @@ resource "google_bigquery_table" "s10_events" {
     { name = "id", type = "INTEGER", mode = "REQUIRED" },
     { name = "kind", type = "STRING", mode = "NULLABLE" },
     { name = "happened", type = "TIMESTAMP", mode = "NULLABLE" },
+    { name = "source", type = "STRING", mode = "NULLABLE" },
   ])
 }
 
@@ -178,7 +198,7 @@ resource "google_pubsub_topic" "s10" {
 resource "google_pubsub_subscription" "s10" {
   name                 = "devsecops-s10-sub"
   topic                = google_pubsub_topic.s10.id
-  ack_deadline_seconds = 20
+  ack_deadline_seconds = 30
 }
 
 output "project_number" {
