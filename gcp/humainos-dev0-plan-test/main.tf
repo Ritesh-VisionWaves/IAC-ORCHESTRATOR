@@ -1,4 +1,5 @@
-# DevSecOps IaC demo on humainos-dev0, stage 1 of 3: create a small order-export stack.
+# DevSecOps IaC demo on humainos-dev0, stage 2 of 3: change it in place - a bigger VM (Compute Engine stops it),
+# a lifecycle rule that deletes old exports, a longer ack deadline.
 # Test resources only (prefix devsecops-demo); stage 3 deletes every one of them.
 
 provider "google" {
@@ -10,7 +11,7 @@ data "google_project" "this" {}
 
 locals {
   zone   = "${var.region}-a"
-  labels = { purpose = "devsecops-demo", stage = "one" }
+  labels = { purpose = "devsecops-demo", stage = "two" }
 }
 
 resource "google_compute_network" "demo" {
@@ -32,7 +33,7 @@ resource "google_service_account" "demo" {
 resource "google_compute_instance" "demo" {
   name                      = "devsecops-demo-vm"
   zone                      = local.zone
-  machine_type              = "e2-micro"
+  machine_type              = "e2-small"
   allow_stopping_for_update = true
   labels                    = local.labels
 
@@ -64,6 +65,15 @@ resource "google_storage_bucket" "demo" {
   versioning {
     enabled = true
   }
+
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
 }
 
 resource "google_storage_bucket_object" "orders" {
@@ -80,15 +90,9 @@ resource "google_pubsub_topic" "orders" {
 resource "google_pubsub_subscription" "billing" {
   name                       = "devsecops-demo-orders-billing"
   topic                      = google_pubsub_topic.orders.id
-  ack_deadline_seconds       = 20
+  ack_deadline_seconds       = 30
   message_retention_duration = "86400s"
   labels                     = local.labels
-}
-
-resource "google_pubsub_subscription_iam_member" "app_reads_billing" {
-  subscription = google_pubsub_subscription.billing.name
-  role         = "roles/pubsub.subscriber"
-  member       = "serviceAccount:${google_service_account.demo.email}"
 }
 
 output "bucket" {
